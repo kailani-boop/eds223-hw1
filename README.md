@@ -12,9 +12,6 @@ eds223-hw1
 |   ej_screen.pdf       # Rendered PDF of ejscreen.qmd
 │   week2.qmd           # Lab 2 practice file (unrelated to this assignment)
 │   .gitignore          # Excludes the data folder from version control
-│   ej_screen_files/    # Folder that contains two EJScreen documentations
-     └───ejscreen-tech-doc-version-2-2.pdf        # EJScreen technical documentation
-     └───EJSCREEN_2023_BG_Columns.xlsx            # Descriptions of each column in the dataset
 └───data/               # Not tracked on GitHub (see Data Access)
      └───ejscreen-tech-doc-version-2-2.pdf        # Doc that explains everything related to the data
      └───EJSCREEN_2023_BG_Columns.xlsx            # Excel sheet that says what each column is for in the dataframe
