@@ -1,0 +1,182 @@
+---
+title: "EDS 223 HW 1"
+author: "Kailani Latimer"
+date: last-modified
+format: 
+  pdf:
+    toc: true
+editor_options: 
+  chunk_output_type: console
+execute: 
+  warning: false
+  message: false
+---
+
+## Introduction
+Communities near major roadways are exposed to more vehicle pollution, along with other forms of pollution. This analysis looks at whether high traffic proximity overlaps with higher PM2.5 levels and with lower-income populations in LA County. I decided on this county because I'm from LA and have lived here my whole life, besides my time at UCSB. As most know, there is a lot of traffic, so when I saw one of the variables was traffic proximity, I knew I wanted to do something with that. 
+
+_Citation:_ U.S. Environmental Protection Agency (2023). *EJScreen: Environmental Justice Screening and Mapping Tool*, v2.2.
+
+## Reading in Packages and Data
+```{r}
+library(tidyverse)
+library(sf)
+library(here)
+library(tmap)
+library(tinytex)
+
+# Read in geodatabase of EJScreen data at the Census Block Group level
+ejscreen <- sf::st_read(here::here("data", 
+    "EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb")) 
+
+# Filter to a state I'm interested in: CA
+california <- ejscreen %>%
+  dplyr::filter(ST_ABBREV == "CA") 
+
+# Filter to a county I'm interested in: LA
+los_angeles <- ejscreen %>%
+  dplyr::filter(CNTY_NAME %in% c("Los Angeles County"))
+
+# Find the average values for all variables within counties
+california_counties <- aggregate(california, 
+    by = list(california$CNTY_NAME), FUN = mean)
+```
+
+
+## Exploring the Data
+```{r}
+# Looking at the shape of the LA dataframe
+dim(los_angeles)  # 6591 rows, 224 cols
+```
+
+## Filtering
+```{r}
+# Narrowing the dataframe down to 3 variables I'm interested in
+la <- los_angeles |> 
+    select('PTRAF', 'PM25', 'LOWINCPCT') 
+```
+
+```{r}
+# Getting rid of missing values in each column
+la_clean <- la |> 
+    filter(!is.na(PTRAF), !is.na(PM25), !is.na(LOWINCPCT)) |> 
+    mutate(LOWINCPCT = LOWINCPCT * 100)
+```
+
+```{r}
+# Making a new variable for traffic proximity after 80th percentile
+high_traffic <- la_clean |> filter(PTRAF >= quantile(PTRAF, 0.8))
+```
+
+
+## Maps
+
+### Map 1
+
+```{r}
+# Map 1: PM2.5
+tm_shape(la_clean) + 
+    tm_polygons(fill = 'PM25',  # bottom layer is of PM2.5
+        fill.scale = tm_scale_intervals(values = 'brewer.yl_or_rd'), 
+            # color scale
+        fill.legend = tm_legend(title = 'PM2.5 (µg/m³)'),  # legend title
+        col = 'white',  # border color change
+        lwd = 0.2) +  # line width of the borders change
+tm_shape(high_traffic) +  # layering high traffic on top of it
+    tm_dots(fill = '#2c7fb8', size = 0.15) +  
+        # dots with blue color and certain size
+tm_add_legend(type = 'symbols',  # adding a legend for the symbols
+        labels = 'Top 20% Traffic Proximity', 
+        fill = '#2c7fb8') +  # same blue as before
+    tm_title('PM2.5 and Traffic Proximity in LA County') +  # title for map
+tm_scalebar(position = c("left", "top"), text.size = 0.4) + # adds a scale bar
+tm_compass(type = "arrow", position = c("right", "bottom"))  # adds a compass
+```
+
+This map looks at the PM2.5 concentration and the top 20% traffic proximity in LA County. The yellow, orange, red color scale represents the PM2.5 levels in ascending order. The blue dots represent the top 20% traffic proximity. Traffic proximity is EJScreen's measure of daily traffic volume on major roads within 500m, weighted by distance. The dots mark block groups in the top 20% of traffic proximity within LA County. 
+
+These dots tend to go in a line. Off an initial look, a lot of these dots that form lines appear to be freeways. I can see where the 10, 405, and 105 are located quite clearly. The cluster in the middle is Downtown LA where many of the freeways intersect. High-traffic block groups appear concentrated in the central and southeastern parts of the county, where PM2.5 is also highest. However, some high PM2.5 areas have few high-traffic block groups, suggesting traffic is not the only driver of PM2.5 levels. Notably, there's a gap in high-traffic block groups along the 405 near the Westside. This gap and these differences on the map made me wonder what the communities around the blue dots look like. 
+
+
+### Map 2
+
+```{r}
+# Map 2: Income map
+tm_shape(la_clean) + 
+    tm_polygons(fill = 'LOWINCPCT',   # bottom layer is of LOWINCPCT
+        fill.scale = tm_scale_intervals(style = 'quantile', 
+                                        values = 'brewer.greens'),
+        # quantile splits the data into bins with equal numbers. 
+        # values is the color scale 
+        fill.legend = tm_legend('Low-income population (%)'), 
+        col = 'white', 
+        lwd = 0.2) + 
+tm_shape(high_traffic) + 
+    tm_dots(fill = '#2c7fb8', size = 0.15) +   # adding the traffic dots
+tm_add_legend(type = 'symbols',  # adding a legend for the symbols
+        labels = 'Top 20% Traffic Proximity',  # title
+        fill = '#2c7fb8') +  # same blue as before
+tm_title('Low-Income Population and Traffic Proximity in LA County') +   
+# title for this map
+tm_scalebar(position = c("left", "bottom"), text.size = 0.4) +  
+    # adds a scalebar
+# adds a compass
+tm_compass(type = "arrow", position = c("right", "bottom")) 
+```
+
+This map compares the percentage of low-income residents in LA County and the top 20% traffic proximity. The light green represents a smaller percentage of low-income people, while the darker green represents a higher percentage of low-income people. The blue dots, like above, represent the top 20% of traffic proximity. 
+
+The highest percentage of low-income people appears in the North, in Antelope Valley, and a smaller part in the South, which is in the Long Beach area. When you look closely at the city of LA, there are lighter green areas along the coast, for the most part, whereas, more inland has medium shades of green. This means that there's a higher percentage of lower-income residents inland, which also happens to be where many of the major freeways are. There isn't a clear correlation between the top 20% traffic proximity and the percentage of low-income people in the area. 
+ 
+
+
+### Maps 1 and 2 Combined
+
+```{r}
+# Map 1
+pm_map <- tm_shape(la_clean) + 
+    tm_polygons(fill = 'PM25',  
+        fill.scale = tm_scale_intervals(values = 'brewer.yl_or_rd'), 
+        fill.legend = tm_legend(title = 'PM2.5 (µg/m³)'),  
+        col = 'white',  
+        lwd = 0.2) +  
+tm_shape(high_traffic) +  
+    tm_dots(fill = '#2c7fb8', size = 0.15) +  
+tm_add_legend(type = 'symbols',  
+        labels = 'Top 20% Traffic Proximity', 
+        fill = '#2c7fb8') +  
+tm_title('PM2.5') +  
+tm_scalebar(position = c("left", "bottom"), text.size = 0.3) +  
+# adds a scale bar
+tm_compass(type = "arrow", position = c("right", "bottom"))  
+# adds a compass
+
+# Map 2
+income_map <- tm_shape(la_clean) + 
+    tm_polygons(fill = 'LOWINCPCT', 
+        fill.scale = tm_scale_intervals(style = 'quantile', 
+                                        values = 'brewer.greens'), 
+        fill.legend = tm_legend('Low-income population (%)'), 
+        col = 'white', 
+        lwd = 0.2) + 
+tm_shape(high_traffic) + 
+    tm_dots(fill = '#2c7fb8', size = 0.15) + 
+tm_add_legend(type = 'symbols',  
+        labels = 'Top 20% Traffic Proximity',  
+        fill = '#2c7fb8') +  
+tm_title('Low Income')  + 
+tm_scalebar(position = c("left", "bottom"), text.size = 0.3) +  
+tm_compass(type = "arrow", position = c("right", "bottom"))
+
+# arranges the maps next to each other in 2 columns
+tmap_arrange(pm_map, income_map, ncol = 2)  
+```
+
+These maps look at the PM2.5 concentration combined with the top 20% traffic proximity and the PM2.5 concentration combined with the percentage of low-income people in LA County (from left to right). The yellow to orange to red color scale on the left map represents the PM2.5 levels in ascending order. The blue dots represent the top 20% traffic proximity. The dots tend to form lines that are along freeways. The map on the right is the same as the green one above, which compares the percentage of low-income residents in LA County the top 20% of traffic proximity. 
+
+I put the maps next to each other to compare PM2.5 concentration and the percent of people in an area that are considered to be low-income, while still keeping the traffic proximity dots. In areas of orange or red, in those same areas on the map on the right, there's some medium shades of green. This suggests that in areas with higher PM2.5 concentration, and high traffic proximity, there's also a higher share of low-income residents. 
+
+
+## Limitations
+
+One limitation in my data exploration is that the PM2.5 values are modeled estimates and vary smoothly across the region, while the traffic proximity varies block to block. This may weaken the visible relationship. Additionally, the dots mark block groups, not actual roads, although they appear to match up.

@@ -1,0 +1,147 @@
+---
+title: "EDS 223 HW 1"
+author: "Kailani Latimer"
+date: last-modified
+format:
+  html:
+    toc: true
+editor_options: 
+  chunk_output_type: console
+---
+
+## Reading in Packages and Data
+```{r}
+library(tidyverse)
+library(sf)
+library(here)
+
+# Read in geodatabase of EJScreen data at the Census Block Group level
+ejscreen <- sf::st_read(here::here("data", "EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb")) 
+
+# Filter to a state I'm interested in: CA
+california <- ejscreen %>%
+  dplyr::filter(ST_ABBREV == "CA") 
+
+# Filter to a county I'm interested in: LA
+los_angeles <- ejscreen %>%
+  dplyr::filter(CNTY_NAME %in% c("Los Angeles County"))
+
+# Find the average values for all variables within counties
+california_counties <- aggregate(california, by = list(california$CNTY_NAME), FUN = mean)
+```
+
+I decided to look at LA county because I'm from here and have lived here my whole life besides my time at UCSB. As most know, there's lots of traffic, so when I saw one of the variables was traffic proximity, I knew I wanted to do something with that. 
+
+
+## Exploring the Data
+```{r}
+# Looking at the shape of the LA dataframe
+dim(los_angeles)  # 6591 rows, 224 cols
+```
+
+## Filtering
+```{r}
+# Narrowing the dataframe down to 2 variables I'm interested in
+la <- los_angeles |> 
+    select('PTRAF', 'PM25', 'LOWINCPCT') 
+```
+
+```{r}
+# Getting rid of missing values in each column
+la_clean <- la |> filter(!is.na(PTRAF), !is.na(PM25), !is.na(LOWINCPCT))
+```
+
+```{r}
+# Making a new variable for traffic proximity after 80th percentile
+high_traffic <- la_clean |> filter(PTRAF >= quantile(PTRAF, 0.8))
+```
+
+
+## Graphs
+
+### Graph 1
+
+```{r}
+# Graph 1
+tm_shape(la_clean) + 
+    tm_polygons(fill = 'PM25',  # bottom layer is of PM2.5
+        fill.scale = tm_scale_intervals(values = 'brewer.yl_or_rd'), # color scale
+        fill.legend = tm_legend(title = 'PM2.5 (µg/m^3)'),  # legend title
+        col = 'white',  # border color change
+        lwd = 0.2) +  # line width of the borders change
+tm_shape(high_traffic) +  # layering high traffic on top of it
+    tm_dots(fill = '#2c7fb8', size = 0.15) +  # dots with blue color and certain size
+tm_add_legend(type = 'symbols',  # adding a legend for the symbols
+        labels = 'Top 20% Traffic Proximity', 
+        fill = '#2c7fb8') +  # same blue as before
+    tm_title('PM2.5 and Traffic Proximity in LA County') +  # title for graph
+tm_scalebar(position = c("left", "top"), text.size = 0.4) + # adds a scale bar
+tm_compass(type = "arrow", position = c("right", "bottom"))  # adds a compass
+```
+
+This graph looks at the PM 2.5 concentration and the top 20% traffic proximity in LA County. The yellow to orange to red color scale represents the PM 2.5 levels in ascending order. The blue dots represent the top 20% traffic proximity. The dots tend to go in a line. Off an initial look, a lot of these dots that form lines appear to be freeways. I can see where the 10, 405, and 105 are located quite clearly. The cluster in the middle is Downtown LA where many of the freeways intersect. The relationship between high PM 2.5 and high traffic proximity isn't as related as I thought it would be. There's a reasonable amount of red to dark red areas without any blue dots, and there's some blue dots in yellow and light orange areas. After looking more closely at the freeways I recognize, there's a gap in one of the freeways that runs along the coast (the 405) in an orange area. Comparing this area to a map, the gap happens to be in Beverly Hills. This didn't surprise me since Beverly Hills has the reputation it has. However, this made me wonder what the communities around the blue dots look like. 
+
+
+### Graph 2
+
+```{r}
+# Income map by itself
+tm_shape(la_clean) + 
+    tm_polygons(fill = 'LOWINCPCT',   # bottom layer is of LOWINCPCT
+        fill.scale = tm_scale_intervals(style = 'quantile', values = 'brewer.greens'),
+        # quantile is to get the percentage. values is the color scale 
+        fill.legend = tm_legend('% Low Income'), 
+        col = 'white', 
+        lwd = 0.2) + 
+tm_shape(high_traffic) + 
+    tm_dots(fill = '#2c7fb8', size = 0.15) +   # adding the traffic dots
+tm_add_legend(type = 'symbols',  # adding a legend for the symbols
+        labels = 'Top 20% Traffic Proximity',  # title
+        fill = '#2c7fb8') +  # same blue as before
+tm_title('Low Income') +   # title for this graph
+tm_scalebar(position = c("left", "bottom"), text.size = 0.4) +  # adds a scalebar
+tm_compass(type = "arrow", position = c("right", "bottom")) # adds a compass
+```
+
+This graph compares the percentage of low income people in LA County to the top 20% traffic proximity. The light green represents a lower percentage of low income people, while the darker green represents a higher percentage of low income people. The blue dots, like above, represent the top 20% of traffic proximity. 
+ 
+
+
+### Graphs 1 and 2 Combined
+
+```{r}
+# Graph 2
+pm_map <- tm_shape(la_clean) + 
+    tm_polygons(fill = 'PM25',  
+        fill.scale = tm_scale_intervals(values = 'brewer.yl_or_rd'), 
+        fill.legend = tm_legend(title = 'PM2.5 (µg/m^3)'),  
+        col = 'white',  
+        lwd = 0.2) +  
+tm_shape(high_traffic) +  
+    tm_dots(fill = '#2c7fb8', size = 0.15) +  
+tm_add_legend(type = 'symbols',  
+        labels = 'Top 20% Traffic Proximity', 
+        fill = '#2c7fb8') +  
+tm_title('PM2.5') +  
+tm_scalebar(position = c("left", "bottom"), text.size = 0.5) +  # adds a scale bar
+tm_compass(type = "arrow", position = c("right", "bottom"))  # adds a compass
+
+income_map <- tm_shape(la_clean) + 
+    tm_polygons(fill = 'LOWINCPCT', 
+        fill.scale = tm_scale_intervals(style = 'quantile', values = 'brewer.greens'), 
+        fill.legend = tm_legend('% Low Income'), 
+        col = 'white', 
+        lwd = 0.2) + 
+tm_shape(high_traffic) + 
+    tm_dots(fill = '#2c7fb8', size = 0.15) + 
+tm_add_legend(type = 'symbols',  
+        labels = 'Top 20% Traffic Proximity',  
+        fill = '#2c7fb8') +  
+tm_title('Low Income')  
+
+tmap_arrange(pm_map, income_map, ncol = 2)  
+# arranges the graphs next to each other in 2 columns
+```
+
+These graphs look at the PM 2.5 concentration combined with the top 20% traffic proximity and the PM 2.5 concentration combined with the percent of low income people in LA County (from left to right). The yellow to orange to red color scale on the left graph represents the PM 2.5 levels in ascending order. The blue dots represent the top 20% traffic proximity. The dots tend to form lines that appear to be along freeways. The map on the right is the same as the green one above, 
+. I put the graphs next to each other to compare PM 2.5 concentration and the percent of people in an area that are considered to be low income, while still keeping the traffic proximity dots. There doesn't appear to be a strong relationship or pattern between any of the variables, which is interesting in and of itself. 
